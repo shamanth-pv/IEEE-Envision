@@ -1,55 +1,91 @@
-// Temperature and Humidity
-#include <WiFi.h>
-#include "DHTesp.h"
-#include "ThingSpeak.h"
+#include <LiquidCrystal.h>
 
-const int DHT_PIN = 15;
-const int LED_PIN = 13;
-const char* WIFI_NAME = "Guest";
-const char* WIFI_PASSWORD = "12345678";
-const int myChannelNumber =2517196 ;
-const char* myApiKey = "LNQ6VVL5TZPNI3UN";
-const char* server = "api.thingspeak.com";
+// Wind speed measurement variables
+float V_wind = 0;
+float Windspeedfloat;
+int Windspeedint;   
+float temp; 
+int gas_sensor_port = A1;
+int gas_sensor_value = 0;
 
-DHTesp dhtSensor;
-WiFiClient client;
+// Rainfall measurement variables
+float rain;
+const int triggerPin = 10;
+const int echoPin = 9;
+long duration;
+LiquidCrystal lcd(8, 2, 6, 5, 4, 3); // LCD setup
+
+
 
 void setup() {
-  Serial.begin(115200);
-  dhtSensor.setup(DHT_PIN, DHTesp::DHT22);
-  pinMode(LED_PIN, OUTPUT);
-  WiFi.begin(WIFI_NAME, WIFI_PASSWORD);
-  while (WiFi.status() != WL_CONNECTED){
-    delay(1000);
-    Serial.println("Wifi not connected");
-  }
-  Serial.println("Wifi connected !");
-  Serial.println("Local IP: " + String(WiFi.localIP()));
-  WiFi.mode(WIFI_STA);
-  ThingSpeak.begin(client);
+  Serial.begin(9600); // Initialize serial communication
+  pinMode(A2, INPUT); // Set pin A2 as input for wind speed measurement
+  Serial.println("Setup done");// Debugging statement
+  pinMode(A0,INPUT);
+  pinMode(A1,INPUT);
+  pinMode(7,OUTPUT);
+  pinMode(triggerPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  lcd.begin(16, 2); // Initialize LCD
 }
 
 void loop() {
-  TempAndHumidity  data = dhtSensor.getTempAndHumidity();
-  ThingSpeak.setField(1,data.temperature);
-  ThingSpeak.setField(2,data.humidity);
-  if (data.temperature > 35 || data.temperature < 12 || data.humidity > 70 || data.humidity < 40) {
-    digitalWrite(LED_PIN, HIGH);
-  }else{
-    digitalWrite(LED_PIN, LOW);
+  Serial.println("Looping..."); // Debugging statement
+  
+  // Read wind speed
+  float V_wind = analogRead(A2) * (5.0 / 1023.0);
+  temp=((analogRead(A0)*0.0048828125)-0.5)*100;
+  // Convert voltage to MPH
+  Windspeedint = (V_wind - 0.4) * 10 * 2.025 * 2.237;
+  Windspeedfloat = (V_wind - 0.4) * 10 * 2.025 * 2.237;
+  
+  // Output wind speed to serial monitor
+  Serial.print("Wind Speed: ");
+  if (Windspeedfloat <= 0) {
+    Serial.print("0.0");
+  } else {
+    Serial.print(Windspeedfloat);
   }
+  Serial.println(" MPH");
   
-  int x = ThingSpeak.writeFields(myChannelNumber,myApiKey);
-  
-  Serial.println("Temp: " + String(data.temperature, 2) + "°C");
-  Serial.println("Humidity: " + String(data.humidity, 1) + "%");
-  
-  if(x == 200){
-    Serial.println("Data pushed successfull");
-  }else{
-    Serial.println("Push error" + String(x));
+  // Output anemometer voltage to serial monitor
+  Serial.print("Anemometer Voltage: ");
+  if (V_wind > 2) {
+    Serial.println("Out of range!");
+  } else if (V_wind < 0.4) {
+    Serial.println("Out of range!");
+  } else {
+    Serial.print(V_wind);
+    Serial.println(" V");
+    Serial.print("Current temperature: ");
+    Serial.println(temp);
+     gas_sensor_value = analogRead(gas_sensor_port);
+  Serial.println("Gas sensor value: " + String(gas_sensor_value));
+  if (gas_sensor_value > 200)
+  {
+    tone(7,523,1000);
   }
-  Serial.println("---");
 
-  delay(10000);
+  }
+   // For rainfall measurement
+  digitalWrite(triggerPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(triggerPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(triggerPin, LOW);
+  duration = pulseIn(echoPin, HIGH);
+  rain = 0.01723 * duration;
+
+  // Display rainfall on LCD
+  lcd.setCursor(0, 0);
+  lcd.print("Rainfall: ");
+  lcd.print(rain);
+  lcd.print("mm");
+  
+  // Print rainfall to serial monitor
+  Serial.print("Rainfall: ");
+  Serial.print(rain);
+  Serial.println(" mm");  
+  
+  delay(1000); // Delay for 1 second before the next reading
 }
